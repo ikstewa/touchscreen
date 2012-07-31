@@ -1,0 +1,102 @@
+ABSTRACT
+(To be written upon project completion.)
+
+General Terms
+TUIO, TUIODriver, TUIOMouse, tracker, client
+
+Keywords
+Multi-touch, TUIO, Linux
+
+1. INTRODUCTION
+Multi-touch technology has become quite popular recently, following the 2007 introduction of iPhone by Apple and the debut of surface computing by Microsoft. The use of multi-touch technology is expected to continue to grow rapidly; for example, multi-touch phones are expected to grow from fewer than 200,000 units in 2006 to more than 21,000,000 units in 2012 [1].
+
+Some work has been done to bring multi-touch to the GNU/Linux platform. The TUIO protocol was  developed to provide a method of communication between multi-touch tracking applications and multi-touch-aware client applications [2]. Multi-pointer X (MPX) was developed as a set of modifications to X.Org to allow multiple independent mouse pointers to be used in the windowing system, and was merged into X.Org in 2008 [3].
+
+Currently, there is no standard method for applications to receive multi-touch input on GNU/Linux. Although the TUIO protocol specifies a method for multi-touch trackers and clients to communicate, it doesn’t identify which tracker each client is supposed to poll for input. Because of this, the only way developers using TUIO can get multi-touch data to their applications is to provide their own tracker. This leads to an obvious duplication of effort among developers, which translates into wasted time and effort.
+
+In this paper, we describe our implementation of a solution to this problem: a kernel-level device driver which userspace and kernel-level programs can poll for multi-touch input data. We call this driver TUIODriver. TUIODriver simply  outputs TUIO messages when read; this approach allows developers to get TUIO data directly, or to layer an adapter over TUIODriver to convert TUIO messages into other forms of input data. As an example, we provide the implementation of TUIOMouse, an adapter between TUIODriver and the Linux input module. We use TUIOMouse to produce mouse input events that X.Org can understand and thereby demonstrate TUIODriver’s functionality.
+
+2. PROJECT OVERVIEW
+TUIO provides a standard means of communication for interactive surfaces; however,  it does not provide a location from which to access this information. In order for a true multi-touch system to remain versatile and provide extensibility, some layer of abstraction is necessary.
+
+We offer a central location from which an application or window management system could receive TUIO data, implemented as a character device provided by a Linux kernel module. This central location allows development of applications within a Linux system independent on the actual source of the interaction events.
+
+2.1 TUIO
+TUIO defines a protocol as well as an API for tangible multi-touch surfaces. The protocol provides an abstract description of a tangible surface allowing for the transmission of touch events as well as generic object states. Typically, control data is provided by a tracker application;  the data is encoded into the protocol and is then provided to a client application. TUIO is based on Open Sound Control (OSC), a network-oriented communication protocol typically used for multimedia devices and sound synthesizers. Although both TUIO and OSC are most commonly implemented using network protocols such as UDP or TCP, the use of network protocols a requirement.
+
+The TUIO 1.0 protocol specification defines three message types: set, alive, and fseq. Each message is given in the following format:
+/tuio/[profileName] set [sessionID parameterList]
+
+/tuio/[profileName] alive [list of active sessionIDs]
+
+/tuio/[profileName] fseq [int32]
+
+TUIO messages do not have a defined packet length. Each message is associated with a profile to help define the message format and to specify any related messages (if any).
+
+The protocol defines a few profiles to handle most situations and allows for custom profiles. The following are the profiles for set messages for cursors and generic objects on a 2D surface:
+
+/tuio/2Dcur set s x y X Y m
+
+/tuio/2Dobj set s i x y a X Y A m r
+
+The parameters for the 2Dcur set message represent session ID, x position, y position, x velocity, y velocity, and acceleration, respectively.
+
+In order, the parameters for the 2Dobj set message represent session ID, class ID, x position, y position, rotation angle, x velocity, y velocity, rotational velocity, acceleration, and rotational acceleration.
+
+2.2 A Central Source of Input
+TUIO is commonly used in a three-part system involving a tracker which provides control data, a client which expects control data, and a protocol (TUIO) to allow the tracker and client to communicate. While this concept works well for individual application stacks, such as digital music synthesizers, when implemented in modern desktop environments, it creates a very tight coupling between the input provider and the applications using that input.
+
+In modern desktop environments, multiple applications may wish to obtain input from the same provider. One way for the applications to do this would be to communicate directly to the provider; however, this method creates unnecessary overhead in the form of redundant connections to the provider.
+To avoid the redundant connections, a developer could create a central input “dispatcher” application that would communicate directly with the input provider and provide the client applications with input data. This would require the input dispatcher to have specific knowledge about the input provider or it would require a designated socket to communicate through. While this method would be sufficient in fully providing the desired functionality, it does not follow the tradition of Linux input devices and produces too tight of a coupling between the provider and input system.
+
+We propose the creation of a single, central device to provide the necessary level of abstraction between the input provider and interactive applications. This follows the Linux tradition in which input devices are collected in the /dev/ filesystem— in most Linux systems, user input is collected through pseudofiles located in the /dev/input directory. We would make touch input data available through the device filesystem  in a location such as /dev/tuio.
+
+Our method would also allow devices to be “layered” on top of each other. For example, one could create a layered device driver that would receive TUIO touch data and use it to simulate mouse events using the Linux input module. (We provide the implementation of this driver as TUIOMouse; it is described in later sections of this paper.)
+
+3. IMPLEMENTATION
+Our implementation is comprised of two character devices, as can be seen in the simple architecture diagram above. It is a layered device architecture. On the bottom layer, we have TUIODriver. On the top layer, we have TUIOMouse. Our design is extensible and other applications can put it to use however they wish. The overall function of the two components in our implementation is to convert TUIO data packed in the OSC protocol into mouse events that are sent to X.Org in order to simulate mouse clicks and movements. Further description of the two components follows below.
+
+3.1 TUIODriver
+TUIODriver is our bottom-layer character device in our framework. The goal of this device is to provide a one-stop place where raw TUIO data can be retrieved. It accepts only read and write operations. There is no support for any other operations, such as open, close, or select. For the write operation, the device accepts TUIO data through the OSC networking protocol. The bulk of TUIODriver functionality comes from unpacking TUIO data from the OSC protocol. The output is raw TUIO data with no networking information included. In order to handle the OSC protocol, we use a POSIX-based library called liblo. This library provides functions very useful in unpacking the TUIO data from the OSC protocol. After unpacking, TUIODriver stores this data in a local buffer within the device. When anything tries to read from TUIODriver, this stored raw TUIO data is returned.
+
+There are a few things worth noting about this driver’s implementation. Data will be constantly being written to the driver every millisecond, and storing all that information will most likely be difficult and unnecessary. When a mouse is moving, if a small portion of the mouse's path is lost, the ultimate result will still be the same: the mouse will end up in the place it's supposed to be, with only a small jump in its path. This will occur because if some of the data of the mouse's path is overwritten, it will only be overwritten with the mouse's new location, thus making the mouse's location as up-to-date as possible. 
+
+These are some considerations in storing the data in the device's buffer. Some data is undoubtedly going to be overwritten, because of the sheer volume of data the device will receive. We have two options in designing our storage buffer within TUIODriver. Our first option is to simply overwrite the entire buffer every time data is written to the device. The advantage of implementing the buffer this way is that it would provide the most recent data received by the device at all times. Since the data read from the device will always be the most recent, there will be little lag when actually moving a mouse when it comes to representing its latest position. The disadvantage of this implementation of the buffer is that there is a larger chance for data to be lost. This is because every time data is written to the device (which happens many times a second), all the data that was written to it before that moment is overwritten. The effect of this issue would be the mouse skipping from spot to spot.
+
+The other option for storage is to use a scrolling buffer. As data is written to the device, it will fill up the scrolling buffer. Once it is full, further data is inserted at the end of the buffer, pushing the oldest data (contained at the front of the buffer) out. This could potentially be a problem because the data that is read from the device will be from the front of the buffer, meaning it will be a bit old (how old it is depends on the size of the scrolling buffer). This will be reflected in a delayed display of the mouse itself, since X.Org would be receiving data that is a bit old. However, this would be advantageous because if we are trying to reflect the mouse's path accurately, it would lose less data than a regular buffer that gets overwritten every time. For example, if someone is trying to draw a path using some kind of visual program (i.e. Photoshop), a slight delay would be a worthwhile tradeoff as long as the overall path is maintained as is. We could implement the scrolling buffer in a way that every time data is read from the device, that read data is flushed from the device's buffer. When implementing the device this way, another issue arises when multiple users are accessing the device simultaneously. There would be concurrency issues in the data stored in the buffer, since some users would retrieve different data, even though the data was retrieved at the same time. Resolving this issue would result in a much more complex implementation.
+
+The main differences between the two implementations is speed and reliability of the information. Due to the drawbacks of a scrolling buffer (concurrency, difficulty of implementation, and speed) we have opted to implement a simpler buffer that gets overwritten every time data is written to the device. Either way, for the driver to serve its purpose successfully, it must be polled constantly. If it isn’t polled on a frequent and consistent basis, much of the information passed to it will be lost, regardless of how we implement the buffer.
+
+3.2 TUIOMouse
+TUIOMouse is responsible for collecting TUIO data from TUIODriver and using that data to simulate a traditional mouse. The mouse is simulated using the Linux input module; mouse input is simulated by simulating mouse events.
+
+(To be completed upon further research and development.)
+
+4. PERFORMANCE AND ANALYSIS
+The hardware we used for creating a touchpad is relatively simple. The basic idea is that there will be a sheet of glass with a webcam directly under it. The webcam is what will be capturing the data and sending it to the computer. On the other side of the glass, a few millimeters above its surface, we have an array of lasers that shoot across the glass. The lasers are placed on each corner of the rectangular glass and shoot through a small lens which diffracts the laser, so that the entire sheet of glass is covered in lasers. When a finger touches the glass, it will interrupt the lasers, which is how we will be recognizing the touches. These touches will be referred to as blobs, because that's what they look like to the webcam. The webcam will transmit this data to a blob detection program, which will convert the image that the webcam sees into data sent through the TUIO protocol.
+
+As can be seen in our diagram, we used a number of different tools in order to test our framework.  An application we found, called touchlib, runs in user space receiving and processing data from the webcam. It uses this webcam data to produce blob information that it sends through the TUIO protocol. This blob information will eventually be turned into a simulated mouse in X.Org. The blob information is then sent to our first character device, TUIODriver.  TUIODriver strips away unnecessary information that is contained within the OSC protocol and produces raw TUIO data that is read by TUIOMouse.
+
+TUIOMouse uses the information received from TUIODriver to simulate a mouse in X.Org for each of the independent touches it receives. To aid us in accomplishing this task, we use the Linux kernel module "input". This module accepts mouse event data and converts it into mouse information usable by X.Org.
+
+5. RELATED WORK
+Ryan Huffman has proposed the creation of an X.Org input driver which would receive TUIO input directly and convert it to MPX input [4]. We are uncertain as to how much progress he has made on his project.
+
+6. FUTURE WORK
+Given the “layerability” of TUIODriver, we have several future projects in mind:
+
+The first would be an X.Org input driver, similar to the one Huffman proposed. However, our X.Org input driver would get its data from TUIODriver, and not an independent tracker.
+
+Another project would be a second “glue” driver similar to TUIOMouse; however, this driver would accept input from TUIODriver and produce Linux input events instead. 
+
+7. CONCLUSION
+(To be written upon project completion.)
+
+8. REFERENCES
+[1] http://www.usatoday.com/tech/products/2007-06-21-1895245927_x.htm
+
+[2] http://www.tuio.org/
+
+[3] http://wearables.unisa.edu.au/mpx/?q=mpx
+
+[4] http://nuigroup.com/forums/viewthread/4975/

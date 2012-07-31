@@ -1,0 +1,6 @@
+INSTALL:
+   sudo ./tuio_install.sh
+
+REMOVE:
+   sudo ./tuio_remove.sh
+

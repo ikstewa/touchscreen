@@ -1,0 +1,8 @@
+Simple test app to demonstrate the use of liblo.
+Liblo is configured to compile as a dynamically-linked library.
+As a result the app must be ran as a shell script.
+When 'make' is ran the executable is placed in .libs/
+Use ./server to run the demo.
+
+Demo blocks on socket port 33333 and waits for TUIO.
+Use TUIO_Simulator for demo.

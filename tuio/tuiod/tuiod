@@ -1,0 +1,4 @@
+#!/bin/bash
+export LD_LIBRARY_PATH=./lib
+
+./lib/tuiod $1 $2

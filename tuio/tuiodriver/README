@@ -1,0 +1,45 @@
+README - tuio.c
+CREATED:    05/08/09
+MODIFIED:   05/27/09
+
+================================================================================
+     This is the device that will accept and output TUIO information through
+     its read/write functions. The device will only accept one reader and one
+     writer at a time. If the device is already being used -EBUSY is returned.
+     A read requires a buffer of sufficient length to include the entire data.
+     No partial messages are returned, -EINVAL if buffer length unacceptable.
+ 
+     The device currently buffers up to BUF_COUNT messages of length BUF_LEN.
+     A message is read only once, than is no longer available. If a message is
+     not read before BUF_COUNT messages have been written, following writes 
+     will overide old messages.
+ 
+
+Note: There might be an issue in the loading of the module when you restart your
+	machine. I had to reinstall the module when I restarted. It works fine
+	after you do that though.
+
+Currently this has only been tested on my virtual Ubuntu 8.10 machine. It runs
+on the 2.6.27-11-generic kernel and the 2.6.29 kernel.
+
+To install:
+While in this directory,
+1. make
+2. sudo insmod ./tuio.ko
+
+From here you should be able to 
+sudo cat /dev/tuio
+and
+sudo echo "Whatever String" > /dev/tuio
+
+To allow regular users to access the device, 
+    1. sudo cp tuio.rules /etc/tuio/
+    2. sudo ln -s ../tuio.rules /etc/udev/rules.d/010_tuio.rules
+    3. sudo rmmod tuio
+    4. sudo insmod ./tuio.ko
+
+To test if the symbolink link was created successfully, do
+    1. ls -l /dev/tuio*
+You should see two files, one being a link to the other.
+
+From here on out, you can read or write strings to the device.

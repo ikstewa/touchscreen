@@ -1,0 +1,4 @@
+TUIO Deamon
+
+Accepts tuio osc packets through udp/tcp sockets and provides to /dev/tuio.
+

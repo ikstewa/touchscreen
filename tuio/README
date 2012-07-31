@@ -1,0 +1,3 @@
+To install the drivers and run the deamon run tuio_install.sh as a privaleged user.
+
+To remove and stop the drivers run tuio_remove.sh as a privaleged user.

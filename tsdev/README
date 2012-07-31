@@ -1,0 +1,41 @@
+README - tsdev.c
+CREATED: 05/08/09
+
+================================================================================
+This device file currently accepts reading and writing operations. Open and 
+close are not supported (though that might not be a bad thing to add in the 
+future... this is primarily a skeleton). The device currently stores a very small
+local buffer (we can change the size easily) which you can write to. Every time
+you write to it, the device's buffer is overwritten. There is no error checking
+for reading/writing sizes, so that's another thing we need to do. If you read
+it once, it empties the buffer and gives it to the caller. If it's already empty,
+it'll print a message indicating so. 
+
+Note: There might be an issue in the loading of the module when you restart your
+	machine. I had to reinstall the module when I restarted. It works fine
+	after you do that though.
+
+Currently this has only been tested on my virtual Ubuntu 8.10 machine. It runs
+on the 2.6.27-11-generic kernel.
+
+To install:
+While in this directory,
+1. make
+2. sudo insmod ./tsdev.ko
+
+From here you should be able to 
+sudo cat /dev/tsdev
+and
+sudo echo "Whatever String" > /dev/tsdev
+
+To allow regular users to access the device, 
+    1. sudo cp tsdev.rules /etc/udev/
+    2. sudo ln -s ../tsdev.rules /etc/udev/rules.d/010_tsdev.rules
+    3. sudo rmmod tsdev
+    4. sudo insmod ./tsdev.ko
+
+To test if the symbolink link was created successfully, do
+    1. ls -l /dev/tsdev*
+You should see two files, one being a link to the other.
+
+From here on out, you can read or write strings to the device.
